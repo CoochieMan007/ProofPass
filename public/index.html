@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="ProofPass: privacy-first Credence ID Cloud SDK interview demo" />
+  <title>ProofPass — Credence ID Demo</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark">P</div><span>ProofPass</span><span class="tag">Credence demo</span></div>
+      <div class="top-actions">
+        <button id="developerToggle" class="chip">◉ Developer View</button>
+        <button id="failureToggle" class="chip">⚗ Failure Lab</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="eyebrow">✦ Privacy-first verification</div>
+        <h1>Prove eligibility.<br><span>Not your entire identity.</span></h1>
+        <p>A digital-ID checkpoint for high-trust actions. ProofPass asks for the minimum evidence a transaction needs and avoids turning verification into an identity database.</p>
+      </div>
+      <div class="trust-pill"><div class="shield">✓</div><div><b>Designed around data minimization</b><small>No ID image in Demo Mode</small></div></div>
+    </section>
+
+    <section id="workspace" class="workspace">
+      <article class="product-card">
+        <div class="rental-header">
+          <div class="car-icon">EV</div>
+          <div><span class="muted">CONFIRM YOUR RENTAL</span><h2>Tesla Model 3</h2><p>Saturday · Downtown pickup</p></div>
+          <div class="price"><strong>$92</strong><span>/ day</span></div>
+        </div>
+        <div class="divider"></div>
+
+        <div class="requirements">
+          <p>Before pickup, confirm:</p>
+          <div><span class="check">✓</span>Valid government-issued digital ID</div>
+          <div><span class="check">✓</span>Required driving eligibility</div>
+        </div>
+
+        <div class="privacy-box"><div class="lock">⌁</div><div><b>Selective by design</b><p>ProofPass does not need your address, license number, height, or an uploaded ID photo for this demo policy.</p></div></div>
+
+        <div class="controls-grid">
+          <label><span>Run mode</span><select id="modeSelect"><option value="demo">Demo Mode — always runnable</option><option id="liveOption" value="live" disabled>Live Credence Mode — credentials required</option></select></label>
+          <label><span>Wallet flow</span><select id="flowSelect"><option value="apple">Apple Wallet · ISO mdoc</option><option value="google">Google Wallet · OpenID4VP</option></select></label>
+        </div>
+
+        <section id="failurePanel" class="failure-panel hidden">
+          <div class="panel-title"><span>⚗</span><div><b>Failure Lab</b><small>Show the interviewer the unhappy paths</small></div></div>
+          <div id="scenarioGrid" class="scenario-grid"></div>
+        </section>
+
+        <div id="resultArea">
+          <button id="verifyButton" class="verify-button"><span>▣</span> Verify with Digital ID <span>→</span></button>
+        </div>
+        <div class="footnote">✓ Wallet consent happens before any credential is shared.</div>
+      </article>
+
+      <aside id="developerPanel" class="developer-panel hidden">
+        <div class="dev-header"><div><span class="eyebrow">{ } Developer view</span><h3>What just happened?</h3></div><span id="modeBadge" class="mode-badge demo">SIMULATED</span></div>
+        <div class="metrics">
+          <div><span class="metric-icon">◷</span><small>Total time</small><b id="elapsed">—</b></div>
+          <div><span class="metric-icon">◫</span><small>PII persisted</small><b>None*</b></div>
+          <div><span class="metric-icon">⌁</span><small>Secrets</small><b>Server-side</b></div>
+        </div>
+        <div id="timeline" class="timeline"></div>
+        <div class="technical-card">
+          <div><span>⌘</span><small>Protocol</small><b id="protocolValue">org-iso-mdoc</b></div>
+          <div><span>✓</span><small>Verifier</small><b>Credence Cloud SDK</b></div>
+          <div><span>◫</span><small>Storage choice</small><b>Decision &gt; raw credential</b></div>
+        </div>
+        <pre id="jsonBlock" class="json-block hidden"></pre>
+        <p class="tiny">*ProofPass does not persist raw credential responses. Production systems may retain audit metadata according to legal and security requirements.</p>
+      </aside>
+    </section>
+
+    <section class="design-strip">
+      <div><span>✓</span><b>Privacy</b><small>Ask only for claims the transaction actually needs.</small></div>
+      <div><span>↻</span><b>Resilience</b><small>Cancellation, expiry and network failure are explicit states.</small></div>
+      <div><span>⌁</span><b>Security</b><small>Credence credentials and tokens stay behind the backend boundary.</small></div>
+      <div><span>{ }</span><b>Maintainability</b><small>Wallet-specific mechanics are isolated from product UI.</small></div>
+    </section>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

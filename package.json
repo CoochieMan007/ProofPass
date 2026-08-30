@@ -1,0 +1,14 @@
+{
+  "name": "proofpass-credence-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-dependency Credence ID Cloud SDK interview demo",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "check": "node --check server.mjs && node --check lib/credence.mjs && node --check public/app.js && node --check scripts/smoke-test.mjs",
+    "test": "node scripts/smoke-test.mjs"
+  }
+}

@@ -8,6 +8,7 @@
 │  - user journey                                         │
 │  - Developer View                                       │
 │  - Failure Lab (Demo Mode only)                         │
+│  - Apple request inspector                              │
 │                                                         │
 │  navigator.credentials.get(...)                         │
 └───────────────────────┬─────────────────────────────────┘
@@ -26,7 +27,10 @@
 │  - access/refresh token management                      │
 │  - flow-specific endpoints                              │
 │  - result normalization                                 │
-│  - claim VALUES discarded before browser response      │
+│  - claim VALUES discarded before browser response       │
+│                                                         │
+│  lib/mdoc.mjs                                           │
+│  - read-only DeviceRequest decoder (inspector)          │
 └───────────────────────┬─────────────────────────────────┘
                         │ Bearer-authenticated requests
                         ▼
@@ -36,6 +40,7 @@
 │  /v1/setup / /v1/refresh                                │
 │  Apple: getDocRequest / verifyDocRequest                │
 │  Google: openid4vp initiate / validate                  │
+│  readerAuth seen only on credenceid.com requests        │
 └───────────────────────┬─────────────────────────────────┘
                         │ prepares / validates credential
                         ▼
@@ -54,13 +59,18 @@
 ### Browser is not trusted with long-lived secrets
 No Credence license key or bearer token is sent to client-side code.
 
+### Wallet requests must be trusted by the wallet
+Apple Wallet authenticates website requests through `readerAuth` signed with an Apple-issued certificate for the requesting domain, and validates the domain. That signature is produced on the Credence side; ProofPass cannot add it. The request inspector decodes each request so a missing or mismatched signature is visible immediately.
+
 ### Raw wallet data is transient
 The browser sends the wallet response to the ProofPass server; it is forwarded to Credence for validation. This sample does not write it to disk.
 
 ### Verified personal values are minimized
-The server parses the Credence result but the interview UI receives only claim names plus success/failure. A real product would define retention requirements with security/legal stakeholders.
+The server parses the Credence result, but the browser receives only claim names plus success/failure. A real product would define retention requirements with security/legal stakeholders.
 
 ## What would change in production
+- reader-authentication certificate provisioned for the production domain (Apple, and any other wallet that requires it)
+- minimal Credence data profile (e.g. 21+ attestation and driving privileges instead of portrait and names)
 - shared token cache instead of process memory if horizontally scaled
 - secret manager instead of `.env.local`
 - structured privacy-safe logs and correlation IDs

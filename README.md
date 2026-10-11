@@ -1,182 +1,113 @@
-# ProofPass — Credence ID Cloud SDK Interview Demo
+# ProofPass
 
-ProofPass is a privacy-first digital identity verification concept built for an SDK/platform interview. It deliberately demonstrates **two things at once**:
+Privacy-first digital ID verification for high-trust checkouts, built on the **Credence ID Cloud SDK**.
 
-1. a polished end-user verification journey, and
-2. a Developer View that explains the architecture, security boundary, state machine, and failure handling.
+ProofPass asks a customer's mobile wallet (Apple Wallet, Google Wallet) for the evidence a transaction needs, has Credence verify it cryptographically, and keeps only the decision, not the customer's identity data. The sample transaction is a car rental pickup.
 
-The project is intentionally **zero dependency**: Node.js serves plain HTML/CSS/JavaScript. That makes the interview demo much less likely to break because of package installation or framework version issues.
+**Live:** https://proofpass-amey.onrender.com
 
-## Run it in under 30 seconds
+- **Demo Mode** runs anywhere with no credentials. It is a deterministic simulation, clearly labelled `SIMULATED`.
+- **Live Mode** calls the real Credence Cloud SDK. It unlocks automatically when Credence credentials are configured on the server.
+- **Developer View** shows the verification timeline, the protocol in use, the result ProofPass keeps, and an **Apple request inspector** that decodes the wallet request Credence returned.
 
-### macOS
-Double-click `start-demo.command`.
+No npm dependencies: Node.js 20+ serves plain HTML, CSS and JavaScript.
 
-### Windows
-Double-click `start-demo.bat`.
-
-### Terminal
-Requirements: **Node.js 20+**.
+## Run locally
 
 ```bash
-npm run dev
+npm start
 ```
 
-Then open:
+Open http://localhost:3000. Demo Mode works immediately.
+
+```bash
+npm run check   # syntax-check every source file
+npm test        # smoke test + Live Mode test against a mock Credence API
+```
+
+## Live Mode
+
+Live Mode needs a **Cloud SDK** license from the [Verify with Credence portal](https://verify.credenceid.com/) (License Management → Generate License → Cloud SDK). The license is bound to the exact origin the app is served from.
+
+| Variable | Value |
+|---|---|
+| `CREDENCE_LICENSE_KEY` | Cloud SDK license key (`CS_…`) |
+| `CREDENCE_PROFILE_ID` | Profile ID attached to that license |
+| `CREDENCE_ORIGIN` | The registered domain, e.g. `https://proofpass-amey.onrender.com` |
+| `CREDENCE_BASE_URL` | Optional. Defaults to `https://credenceid.com/cloudsdk/playground` |
+| `HOST` | Optional. Defaults to `127.0.0.1`; set `0.0.0.0` on a hosting platform |
+| `PORT` | Optional. Defaults to `3000` |
+
+Locally, copy `.env.example` to `.env.local` (git-ignored). On a host, set them as environment variables. Values are trimmed, so a pasted trailing newline doesn't break authentication.
+
+### Deploying on Render
+
+Web Service from this repo → Runtime **Node**, Build `npm install`, Start `node server.mjs`, set `HOST=0.0.0.0` plus the Credence variables. Generate the Cloud SDK license for the exact `https://<service>.onrender.com` origin. Free instances sleep when idle, so the first request can take about a minute.
+
+## How Live Mode works
+
+The browser never sees the license key or tokens. It talks only to the ProofPass server, which talks to Credence.
 
 ```text
-http://localhost:3000
+Browser                     ProofPass server                    Credence Cloud SDK
+───────                     ────────────────                    ──────────────────
+pointerdown ── POST /api/session ──► token (cached, 60 s buffer) ─► /v1/setup or /v1/refresh
+                                     Apple:  ─────────────────────► /v1/getDocRequest
+                                     Google: ─────────────────────► /dcapi/openid4vp/v1/initiate
+            ◄── { protocol, request, inspection }
+click ── navigator.credentials.get({ digital: { requests: [{ protocol, data }] } })
+            │  wallet shows the requested attributes; holder consents
+            ▼
+        POST /api/verify ──────────► Apple:  ─────────────────────► /v1/verifyDocRequest
+                                     Google: ─────────────────────► /dcapi/openid4vp/v1/validate
+            ◄── { verified, claimKeys }   (claim values discarded server-side)
 ```
 
-There are no npm dependencies to install.
+| | Apple / ISO mdoc | Google / OpenID4VP |
+|---|---|---|
+| DC API protocol | `org-iso-mdoc` | `openid4vp-v1-unsigned` |
+| `data` passed to the wallet | `{ deviceRequest, encryptionInfo }` | the `payload` object from `initiate` |
+| Sent back to Credence | `credential.data` (JSON string if the browser returns an object) | `credential.data.response` (JWE) |
 
-## What works without any Credence account
+These shapes match Credence's [React reference integration](https://github.com/CredenceID/React-CloudSDK-Integration). The session request starts on `pointerdown` so that `navigator.credentials.get()` still runs inside the user's tap, which iOS Safari requires.
 
-**Demo Mode works immediately.** It is deterministic and clearly marked `SIMULATED`.
+### Design choices
 
-Use it to show:
+- **Secrets stay on the server.** License key, Profile ID, access and refresh tokens never reach client code. Every Credence call carries the registered `Origin`.
+- **Token lifecycle.** The access token is cached with a 60-second expiry buffer and renewed via `/v1/refresh`, falling back to `/v1/setup`. Concurrent requests share one in-flight renewal so a rotating refresh token is never spent twice.
+- **Data minimization.** The verification result is parsed server-side; the browser receives only the *names* of verified claims. Raw wallet responses are forwarded to Credence and never written to disk.
+- **Failures are product states.** Wallet cancellation, no compatible wallet, unsupported browser, Credence errors and timeouts (15 s) each map to a neutral, user-safe message. Technical detail goes to the Developer View only, and all rendered text is escaped.
+- **Protocol mechanics are isolated.** `public/app.js` owns the user journey. `lib/credence.mjs` owns Credence authentication, endpoints and response shaping. `lib/mdoc.mjs` decodes ISO 18013-5 requests for inspection only.
 
-- Happy-path verification
-- Apple Wallet / `org-iso-mdoc` concept
-- Google Wallet / `openid4vp` concept
-- Developer View
-- Failure Lab
-  - user cancellation
-  - expired session
-  - unsupported browser
-  - network timeout
-  - failed verification
-- Privacy/data-minimization design
-- Server-side secret isolation
+## Status and known limitation
 
-The simulator does **not** claim a real credential was cryptographically verified.
+Verified against the live Credence Cloud SDK (`playground`) on Oct 10, 2026:
 
-## Enable real Credence Live Mode
+| Step | Status |
+|---|---|
+| License activation, token issue and refresh | ✅ |
+| Apple (`org-iso-mdoc`) and Google (`openid4vp-v1-unsigned`) wallet requests created | ✅ |
+| Browser hands the request to the wallet (Chrome QR → iPhone) | ✅ |
+| Apple Wallet offers the ID | ❌ "No eligible IDs available on your device" |
+| Credence validates a wallet response | ⏳ not reached |
 
-A live flow requires values issued/configured through Credence:
+**Why Apple Wallet declines:** Apple Wallet only offers IDs to website requests signed (`readerAuth`) with an Apple-issued certificate for the requesting domain. The Developer View's request inspector shows the difference. Credence's hosted playground request is signed with an Apple-issued certificate for `credenceid.com` and is accepted on the same iPhone and California DL. The request Credence returns for this domain has no `readerAuth`. Signing for a customer domain has to be provisioned on the Credence/Apple side and has been raised with Credence.
 
-- Cloud SDK license key
-- Profile ID
-- Registered HTTPS origin/domain
-
-Copy `.env.example` to `.env.local` and fill:
-
-```env
-CREDENCE_LICENSE_KEY=...
-CREDENCE_PROFILE_ID=...
-CREDENCE_ORIGIN=https://the-domain-registered-with-credence.example
-CREDENCE_BASE_URL=https://credenceid.com/cloudsdk/playground
-```
-
-Restart the app. The Live Mode option unlocks automatically when those values exist.
-
-Important: the registered origin is part of Credence's security model. A real demo may need to run on the HTTPS domain registered with the Cloud SDK key rather than localhost.
-
-## Current live flow implemented
-
-### Apple / DC API / ISO mdoc
-
-```text
-ProofPass server
-   | POST /v1/setup
-   v
-Credence Cloud SDK
-   | access token
-   v
-ProofPass server
-   | POST /v1/getDocRequest
-   v
-Browser
-   | navigator.credentials.get({ protocol: "org-iso-mdoc" })
-   v
-Apple Wallet / compatible wallet
-   | holder consents
-   v
-Browser -> ProofPass server
-   | credential.data
-   v
-Credence /v1/verifyDocRequest
-   | verified result
-   v
-ProofPass decision
-```
-
-### Google / DC API / OpenID4VP
-
-```text
-ProofPass server
-   | POST /dcapi/openid4vp/v1/initiate
-   v
-Browser
-   | navigator.credentials.get({ protocol: "openid4vp" })
-   v
-Google Wallet / compatible wallet
-   | credential.data
-   v
-ProofPass server
-   | POST /dcapi/openid4vp/v1/validate
-   v
-Credence verification result
-```
-
-## Why this architecture is interview-worthy
-
-### 1. Secrets stay behind a backend boundary
-The browser never receives the Cloud SDK license key, Profile ID, access token, or refresh token.
-
-### 2. Token lifecycle is handled
-The adapter caches the access token, uses a 60-second expiry buffer, attempts `/v1/refresh`, and falls back to `/v1/setup` if necessary.
-
-### 3. The app does not become an identity database
-The live adapter parses the verified result server-side but deliberately returns only the **names of claims received**, not their personal values. The raw wallet response is not written to disk.
-
-### 4. Failures are product states
-Cancellation, expiry, unsupported browser, network failure, and verification failure are explicit demo scenarios instead of afterthoughts.
-
-### 5. Protocol mechanics are isolated
-`public/app.js` thinks about a verification journey. `lib/credence.mjs` owns Credence-specific authentication, endpoints, and response normalization.
+The Google Wallet flow is implemented to the same reference shapes but has not yet been tested with an ID in Google Wallet.
 
 ## Code map
 
 ```text
-proofpass-credence-demo/
-├── public/
-│   ├── index.html        # product UI structure
-│   ├── styles.css        # polished responsive design
-│   └── app.js            # UI state machine, Demo Mode, Live browser wallet call
-├── lib/
-│   └── credence.mjs      # server-only Credence adapter + token management
-├── scripts/
-│   └── smoke-test.mjs    # automatic sanity test
-├── server.mjs            # tiny backend + API boundary + static server
-├── .env.example          # optional Live Mode configuration
-├── ARCHITECTURE.md       # trust boundaries, production deltas
-├── SOURCES.md            # Credence docs referenced
-└── CREDENCE_IMPROVEMENTS.md  # developer-experience feedback for Credence
+server.mjs                       HTTP server: static files, /api/status, /api/session, /api/verify, security headers
+lib/credence.mjs                 Server-only Credence adapter: config, tokens, endpoints, response shaping
+lib/mdoc.mjs                     Read-only ISO 18013-5 DeviceRequest decoder for the request inspector
+public/index.html                Product UI
+public/app.js                    UI state machine, Demo Mode, Live Mode, error mapping, request inspector
+public/styles.css                Styles
+scripts/smoke-test.mjs           Starts the server without credentials; checks static app and safe 503
+scripts/live-mock-test.mjs       Runs Live Mode against a mock Credence API
+scripts/fixtures/                Captured Credence playground DeviceRequest (signed) used by the tests
+ARCHITECTURE.md                  Trust boundaries and production deltas
+CREDENCE_IMPROVEMENTS.md         Developer-experience findings from the integration
+SOURCES.md                       Documentation and references used
 ```
-
-## Test before the interview
-
-```bash
-npm run check
-npm test
-```
-
-Expected:
-
-```text
-✓ ProofPass smoke test passed
-```
-
-## What to say about Demo Mode
-
-> “The state machine is running in deterministic Demo Mode so I can reliably demonstrate success and failure paths. It is explicitly labeled simulated. A separate Live Mode implements the documented Credence browser flow and unlocks only when valid Credence credentials are configured.”
-
-## Credence references used
-
-- https://credenceid.com/digital-id/tap2id-cloud-sdk/
-- https://credenceid.com/mobile-id/developer-documentation/sdk-reference/
-- https://credenceid.com/mobile-id/developer-documentation/integration-guide/
-- https://credenceid.com/resources/developer-documentation/tap2id/onboarding/
-
-The current detailed SDK reference describes `https://credenceid.com/cloudsdk/playground` as the Cloud SDK base URL. Always re-check the assigned environment and portal values before a real live demo.

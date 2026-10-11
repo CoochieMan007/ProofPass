@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Zero-dependency Credence ID Cloud SDK interview demo",
+  "description": "Privacy-first digital ID verification on the Credence ID Cloud SDK (zero dependencies)",
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node server.mjs",

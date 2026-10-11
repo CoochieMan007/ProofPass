@@ -139,8 +139,8 @@ const server = http.createServer(async (req, res) => {
   res.end("Not found");
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`\nProofPass is running: http://localhost:${PORT}`);
+server.listen(PORT, process.env.HOST || "127.0.0.1", () => {
+console.log(`\nProofPass is running: http://localhost:${PORT}`);
   console.log(`Mode: ${isLiveConfigured() ? "Demo + Live Credence" : "Demo (no Credence credentials required)"}`);
   console.log("Press Ctrl+C to stop.\n");
 });

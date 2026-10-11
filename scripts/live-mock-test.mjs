@@ -1,6 +1,10 @@
 // Exercises the Live Mode server path against a local mock of the Credence Cloud SDK.
 import http from "node:http";
 import { spawn } from "node:child_process";
+import { decode } from "../lib/mdoc.mjs";
+
+// Real two-document DeviceRequest (mDL + aamva.pdf417) returned by a Credence profile.
+const TWO_DOC_REQUEST = "omd2ZXJzaW9uYzEuMGtkb2NSZXF1ZXN0c4KhbGl0ZW1zUmVxdWVzdNgYWFuiZ2RvY1R5cGV1b3JnLmlzby4xODAxMy41LjEubURMam5hbWVTcGFjZXOhcW9yZy5pc28uMTgwMTMuNS4xomhwb3J0cmFpdPRxaXNzdWluZ19hdXRob3JpdHn0oWxpdGVtc1JlcXVlc3TYGFhJomdkb2NUeXBlbGFhbXZhLnBkZjQxN2puYW1lU3BhY2VzoWxhYW12YS5wZGY0MTelY0RBQ_RjREFE9GNEQUr0Y0RCQvRjRENT9A";
 
 const mockPort = 3299;
 const appPort = 3298;
@@ -16,7 +20,7 @@ const mock = http.createServer(async (req, res) => {
     res.end(JSON.stringify(value));
   };
   if (req.url === "/v1/setup") return send({ accessToken: "AT", refreshToken: "RT", expiresIn: 900 });
-  if (req.url === "/v1/getDocRequest") return send({ sessionId: "S1", dcRequest: { deviceRequest: "DEVREQ", encryptionInfo: "ENCINFO" } });
+  if (req.url === "/v1/getDocRequest") return send({ sessionId: "S1", dcRequest: { deviceRequest: TWO_DOC_REQUEST, encryptionInfo: "ENCINFO" } });
   if (req.url === "/v1/verifyDocRequest") return send({ res: true, resDetails: JSON.stringify({ given_name: "Jane", age_over_21: true }) });
   if (req.url === "/dcapi/openid4vp/v1/initiate") return send({ sessionId: "S2", payload: { response_type: "vp_token" } });
   if (req.url === "/dcapi/openid4vp/v1/validate") return send({ cancelled: true, message: "User declined" });
@@ -59,7 +63,9 @@ try {
     post("/api/session", JSON.stringify({ flow: "google" })),
   ]);
   assert(apple.status === 200, `Apple session failed: ${JSON.stringify(apple.json)}`);
-  assert(apple.json.request?.deviceRequest === "DEVREQ" && apple.json.request?.encryptionInfo === "ENCINFO", "Apple request must be { deviceRequest, encryptionInfo }.");
+  assert(typeof apple.json.request?.deviceRequest === "string" && apple.json.request?.encryptionInfo === "ENCINFO", "Apple request must be { deviceRequest, encryptionInfo }.");
+  const docRequests = decode(Buffer.from(apple.json.request.deviceRequest, "base64url")).value.find((e) => e.key === "docRequests").val.value;
+  assert(docRequests.length === 1, "Apple request should keep only the mDL docRequest.");
   assert(google.json.request?.response_type === "vp_token", "Google request must pass the payload object through.");
   assert(seen.filter((r) => r.path === "/v1/setup").length === 1, "Concurrent sessions should share one token setup.");
 
@@ -80,7 +86,7 @@ try {
   assert(malformed.status === 400, `Malformed JSON should return 400, got ${malformed.status}.`);
 
   console.log("✓ ProofPass live-mode mock test passed");
-  console.log("  - Apple request shape matches the Digital Credentials API");
+  console.log("  - Apple request shape matches the Digital Credentials API (mDL only)");
   console.log("  - wallet response unwrapped; only claim names returned");
   console.log("  - credentials trimmed; concurrent requests share one token");
   console.log("  - cancellation and malformed input handled");

@@ -38,7 +38,7 @@ function describeLiveError(error) {
   switch (error?.name) {
     case "NotAllowedError":
     case "AbortError":
-      return new LiveError("Nothing was shared", "The wallet request was cancelled before consent. You can safely try again.", detail);
+      return new LiveError("Nothing was shared", "The wallet request ended before anything was shared. You can safely try again.", detail);
     case "NotSupportedError":
     case "TypeError":
       return new LiveError("Wallet flow unavailable", "This browser could not start a digital ID request. Try a current version of Chrome or Safari.", detail);

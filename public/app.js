@@ -88,7 +88,7 @@ const domainMatches = (domains) => domains.some((d) => location.hostname === d |
 
 // The Credence sessionId lets support find this exact request in their logs.
 const sessionMeta = (session, source) => ({ sessionId: session.sessionId, at: new Date(), source });
-const formatLocalTime = (date) => date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium", timeZoneName: "short" });
+const formatLocalTime = (date) => date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "long" });
 
 function renderInspector(live, note, meta) {
   const ref = PLAYGROUND_REFERENCE;
@@ -136,15 +136,18 @@ async function copySession(meta) {
 async function inspectLiveRequest() {
   if (!state.liveConfigured) return renderInspector(null, "Live Mode is not configured on this server, so only the playground reference is shown.");
   $("inspectButton").disabled = true;
+  let response;
   try {
-    const { ok, status, body } = await requestSession("apple");
-    if (!ok) return renderInspector({ error: body.error || `HTTP ${status}` });
-    renderInspector(body.inspection, undefined, sessionMeta(body, "inspection only, wallet not opened"));
+    response = await requestSession("apple");
   } catch {
-    renderInspector({ error: "Could not reach the ProofPass server." });
+    response = null;
   } finally {
     $("inspectButton").disabled = false;
   }
+  if (!response) return renderInspector({ error: "Could not reach the ProofPass server." });
+  const { ok, status, body } = response;
+  if (!ok) return renderInspector({ error: body.error || `HTTP ${status}` });
+  renderInspector(body.inspection, undefined, sessionMeta(body, "inspection only, wallet not opened"));
 }
 
 function updateProtocol() {

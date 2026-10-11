@@ -86,7 +86,11 @@ const PLAYGROUND_REFERENCE = {
 const formatDate = (iso) => (iso ? new Date(iso).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "—");
 const domainMatches = (domains) => domains.some((d) => location.hostname === d || location.hostname.endsWith(`.${d}`));
 
-function renderInspector(live, note) {
+// The Credence sessionId lets support find this exact request in their logs.
+const sessionMeta = (session, source) => ({ sessionId: session.sessionId, at: new Date(), source });
+const formatLocalTime = (date) => date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium", timeZoneName: "short" });
+
+function renderInspector(live, note, meta) {
   const ref = PLAYGROUND_REFERENCE;
   const ours = live && !live.error ? live : null;
   const docs = (r) => r.docRequests.map((d) => escapeHtml(`${d.docType} (${typeof d.elements === "number" ? d.elements : d.elements.length})`)).join("<br>");
@@ -111,7 +115,22 @@ function renderInspector(live, note) {
   else if (ours && !ours.signed) verdict = "Apple Wallet only offers IDs to website requests signed with an Apple-issued certificate for the requesting domain. Credence signs its own playground (credenceid.com) but returns this site's request unsigned, so Wallet reports no eligible IDs.";
   else if (ours?.signed) verdict = domainMatches(ours.signer.domains) ? "Signed for this domain — Apple Wallet should accept it." : "Signed, but for a different domain than this page — Apple Wallet's domain check will fail.";
 
-  $("inspectorBody").innerHTML = `<table class="inspector-table"><thead><tr><th></th><th>Credence playground<small>captured ${escapeHtml(ref.captured)}</small></th><th>ProofPass<small>${ours ? "live, just now" : "not inspected yet"}</small></th></tr></thead><tbody>${body}</tbody></table><p class="inspector-verdict ${ours && !ours.signed ? "bad" : ""}">${escapeHtml(verdict)}</p>`;
+  const session = meta?.sessionId
+    ? `<div class="inspector-session"><div><small>Credence session ID · ${escapeHtml(meta.source)}</small><code id="sessionIdValue">${escapeHtml(meta.sessionId)}</code><small>${escapeHtml(formatLocalTime(meta.at))}</small></div><button id="copySessionButton" class="chip">Copy</button></div>`
+    : "";
+  $("inspectorBody").innerHTML = session + `<table class="inspector-table"><thead><tr><th></th><th>Credence playground<small>captured ${escapeHtml(ref.captured)}</small></th><th>ProofPass<small>${ours ? "live, just now" : "not inspected yet"}</small></th></tr></thead><tbody>${body}</tbody></table><p class="inspector-verdict ${ours && !ours.signed ? "bad" : ""}">${escapeHtml(verdict)}</p>`;
+  if (session) $("copySessionButton").addEventListener("click", () => copySession(meta));
+}
+
+async function copySession(meta) {
+  const text = `${meta.sessionId} (${formatLocalTime(meta.at)})`;
+  try {
+    await navigator.clipboard.writeText(text);
+    $("copySessionButton").textContent = "Copied";
+  } catch {
+    // Clipboard can be blocked; select the ID so it can be copied manually.
+    getSelection().selectAllChildren($("sessionIdValue"));
+  }
 }
 
 async function inspectLiveRequest() {
@@ -120,7 +139,7 @@ async function inspectLiveRequest() {
   try {
     const { ok, status, body } = await requestSession("apple");
     if (!ok) return renderInspector({ error: body.error || `HTTP ${status}` });
-    renderInspector(body.inspection);
+    renderInspector(body.inspection, undefined, sessionMeta(body, "inspection only, wallet not opened"));
   } catch {
     renderInspector({ error: "Could not reach the ProofPass server." });
   } finally {
@@ -242,7 +261,7 @@ async function runLive() {
     statuses[0] = "active"; renderTimeline(statuses);
     const { ok, status, body: session } = await takeSession();
     if (!ok) throw new LiveError("Verifier unavailable", "ProofPass could not start a verification session. Please try again shortly.", session.error || `HTTP ${status}`);
-    if (session.inspection) renderInspector(session.inspection);
+    if (session.inspection) renderInspector(session.inspection, undefined, sessionMeta(session, "sent to the wallet"));
     statuses[0] = "success"; statuses[1] = "success"; statuses[2] = "active"; renderTimeline(statuses);
 
     if (!navigator.credentials?.get) {

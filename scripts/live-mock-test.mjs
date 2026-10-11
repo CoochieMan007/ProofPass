@@ -1,6 +1,13 @@
 // Exercises the Live Mode server path against a local mock of the Credence Cloud SDK.
 import http from "node:http";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { inspectDeviceRequest } from "../lib/mdoc.mjs";
+
+// Signed request from Credence's hosted playground (readerAuthAll, Apple-issued cert for credenceid.com).
+const SIGNED_REQUEST = readFileSync(new URL("./fixtures/credence-playground-devicerequest.txt", import.meta.url), "utf8").trim();
+// Unsigned two-document request returned for a customer domain.
+const UNSIGNED_REQUEST = "omd2ZXJzaW9uYzEuMGtkb2NSZXF1ZXN0c4KhbGl0ZW1zUmVxdWVzdNgYWFuiZ2RvY1R5cGV1b3JnLmlzby4xODAxMy41LjEubURMam5hbWVTcGFjZXOhcW9yZy5pc28uMTgwMTMuNS4xomhwb3J0cmFpdPRxaXNzdWluZ19hdXRob3JpdHn0oWxpdGVtc1JlcXVlc3TYGFhJomdkb2NUeXBlbGFhbXZhLnBkZjQxN2puYW1lU3BhY2VzoWxhYW12YS5wZGY0MTelY0RBQ_RjREFE9GNEQUr0Y0RCQvRjRENT9A";
 
 const mockPort = 3299;
 const appPort = 3298;
@@ -16,7 +23,7 @@ const mock = http.createServer(async (req, res) => {
     res.end(JSON.stringify(value));
   };
   if (req.url === "/v1/setup") return send({ accessToken: "AT", refreshToken: "RT", expiresIn: 900 });
-  if (req.url === "/v1/getDocRequest") return send({ sessionId: "S1", dcRequest: { deviceRequest: "DEVREQ", encryptionInfo: "ENCINFO" } });
+  if (req.url === "/v1/getDocRequest") return send({ sessionId: "S1", dcRequest: { deviceRequest: UNSIGNED_REQUEST, encryptionInfo: "ENCINFO" } });
   if (req.url === "/v1/verifyDocRequest") return send({ res: true, resDetails: JSON.stringify({ given_name: "Jane", age_over_21: true }) });
   if (req.url === "/dcapi/openid4vp/v1/initiate") return send({ sessionId: "S2", payload: { response_type: "vp_token" } });
   if (req.url === "/dcapi/openid4vp/v1/validate") return send({ cancelled: true, message: "User declined" });
@@ -59,7 +66,11 @@ try {
     post("/api/session", JSON.stringify({ flow: "google" })),
   ]);
   assert(apple.status === 200, `Apple session failed: ${JSON.stringify(apple.json)}`);
-  assert(apple.json.request?.deviceRequest === "DEVREQ" && apple.json.request?.encryptionInfo === "ENCINFO", "Apple request must be { deviceRequest, encryptionInfo }.");
+  assert(apple.json.request?.deviceRequest === UNSIGNED_REQUEST && apple.json.request?.encryptionInfo === "ENCINFO", "Apple request must be { deviceRequest, encryptionInfo }.");
+  assert(apple.json.inspection?.signed === false && apple.json.inspection.docRequests.length === 2, "Session should include the request inspection (unsigned, 2 docRequests).");
+  const signed = inspectDeviceRequest(SIGNED_REQUEST);
+  assert(signed.signed && signed.version === "1.1" && signed.signer.domains[0] === "credenceid.com" && signed.signer.issuer.startsWith("Apple Application Integration"), "Inspector should read readerAuthAll and the Apple-issued certificate.");
+  assert(inspectDeviceRequest("!!").error, "Inspector should report undecodable input instead of throwing.");
   assert(google.json.request?.response_type === "vp_token", "Google request must pass the payload object through.");
   assert(google.json.protocol === "openid4vp-v1-unsigned", "Google flow should use the openid4vp-v1-unsigned protocol.");
   assert(seen.filter((r) => r.path === "/v1/setup").length === 1, "Concurrent sessions should share one token setup.");
@@ -88,6 +99,7 @@ try {
 console.log("  - Google uses openid4vp-v1-unsigned; every call carries Origin");
   console.log("  - credentials trimmed; concurrent requests share one token");
   console.log("  - cancellation and malformed input handled");
+console.log("  - request inspector reads docRequests, readerAuth and certificate domain");
 } finally {
   child.kill("SIGTERM");
   mock.close();

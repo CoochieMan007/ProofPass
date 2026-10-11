@@ -67,6 +67,67 @@ function renderScenarios() {
   }));
 }
 
+// Decoded from the getDocRequest response of Credence's hosted playground, which Apple
+// Wallet accepts on the same iPhone and California DL that reject ProofPass's request.
+const PLAYGROUND_REFERENCE = {
+  source: "credenceid.com/digitalid-playground",
+  captured: "2026-10-10",
+  wallet: "Shows the ID for consent",
+  version: "1.1",
+  docRequests: [
+    { docType: "org.iso.18013.5.1.mDL", elements: 29 },
+    { docType: "org.iso.23220.photoid.1", elements: 8 },
+    { docType: "aamva.pdf417", elements: 5 },
+  ],
+  signed: true,
+  signer: { domains: ["credenceid.com"], issuer: "Apple Application Integration CA 7 - G1", validTo: "2026-10-13T17:19:09.000Z" },
+};
+
+const formatDate = (iso) => (iso ? new Date(iso).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "—");
+const domainMatches = (domains) => domains.some((d) => location.hostname === d || location.hostname.endsWith(`.${d}`));
+
+function renderInspector(live, note) {
+  const ref = PLAYGROUND_REFERENCE;
+  const ours = live && !live.error ? live : null;
+  const docs = (r) => r.docRequests.map((d) => escapeHtml(`${d.docType} (${typeof d.elements === "number" ? d.elements : d.elements.length})`)).join("<br>");
+  const signedText = (r) => (r.signed ? "Present" : "Missing");
+  const rows = [
+    ["Reader signature (readerAuth)", signedText(ref), ours ? signedText(ours) : "—", true],
+    ["Certificate issuer", ref.signer.issuer, ours?.signer?.issuer ?? "—", true],
+    ["Certificate domain", ref.signer.domains.join(", "), ours?.signer?.domains?.join(", ") || "—", true],
+    ["Matches this page's domain", domainMatches(ref.signer.domains) ? "Yes" : `No (${location.hostname})`, ours?.signer ? (domainMatches(ours.signer.domains) ? "Yes" : "No") : "—", false],
+    ["Certificate valid until", formatDate(ref.signer.validTo), formatDate(ours?.signer?.validTo), false],
+    ["DeviceRequest version", ref.version, ours?.version ?? "—", false],
+    ["Documents (fields)", docs(ref), ours ? docs(ours) : "—", false],
+    ["Apple Wallet result", ref.wallet, ours ? (ours.signed ? "Should be offered" : "“No eligible IDs”") : "—", true],
+  ];
+  const body = rows.map(([label, a, b, key]) => {
+    const diff = key && ours && a !== b;
+    return `<tr class="${diff ? "diff" : ""}"><th>${escapeHtml(label)}</th><td>${label.startsWith("Documents") ? a : escapeHtml(a)}</td><td>${label.startsWith("Documents") ? b : escapeHtml(b)}</td></tr>`;
+  }).join("");
+
+  let verdict = note || "Press “Inspect live request” to decode the request Credence returns for this site.";
+  if (live?.error) verdict = live.error;
+  else if (ours && !ours.signed) verdict = "Apple Wallet only offers IDs to website requests signed with an Apple-issued certificate for the requesting domain. Credence signs its own playground (credenceid.com) but returns this site's request unsigned, so Wallet reports no eligible IDs.";
+  else if (ours?.signed) verdict = domainMatches(ours.signer.domains) ? "Signed for this domain — Apple Wallet should accept it." : "Signed, but for a different domain than this page — Apple Wallet's domain check will fail.";
+
+  $("inspectorBody").innerHTML = `<table class="inspector-table"><thead><tr><th></th><th>Credence playground<small>captured ${escapeHtml(ref.captured)}</small></th><th>ProofPass<small>${ours ? "live, just now" : "not inspected yet"}</small></th></tr></thead><tbody>${body}</tbody></table><p class="inspector-verdict ${ours && !ours.signed ? "bad" : ""}">${escapeHtml(verdict)}</p>`;
+}
+
+async function inspectLiveRequest() {
+  if (!state.liveConfigured) return renderInspector(null, "Live Mode is not configured on this server, so only the playground reference is shown.");
+  $("inspectButton").disabled = true;
+  try {
+    const { ok, status, body } = await requestSession("apple");
+    if (!ok) return renderInspector({ error: body.error || `HTTP ${status}` });
+    renderInspector(body.inspection);
+  } catch {
+    renderInspector({ error: "Could not reach the ProofPass server." });
+  } finally {
+    $("inspectButton").disabled = false;
+  }
+}
+
 function updateProtocol() {
   $("protocolValue").textContent = state.flow === "google" ? "openid4vp-v1-unsigned" : "org-iso-mdoc";
 }
@@ -181,6 +242,7 @@ async function runLive() {
     statuses[0] = "active"; renderTimeline(statuses);
     const { ok, status, body: session } = await takeSession();
     if (!ok) throw new LiveError("Verifier unavailable", "ProofPass could not start a verification session. Please try again shortly.", session.error || `HTTP ${status}`);
+    if (session.inspection) renderInspector(session.inspection);
     statuses[0] = "success"; statuses[1] = "success"; statuses[2] = "active"; renderTimeline(statuses);
 
     if (!navigator.credentials?.get) {
@@ -245,3 +307,5 @@ renderTimeline();
 renderScenarios();
 updateProtocol();
 bindVerifyButton();
+renderInspector(null);
+$("inspectButton").addEventListener("click", inspectLiveRequest);

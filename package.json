@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",
-    "check": "node --check server.mjs && node --check lib/credence.mjs && node --check public/app.js && node --check scripts/smoke-test.mjs && node --check scripts/live-mock-test.mjs",
+    "check": "node --check server.mjs && node --check lib/credence.mjs && node --check public/app.js && node --check scripts/smoke-test.mjs && node --check scripts/live-mock-test.mjs && node --check lib/mdoc.mjs",
     "test": "node scripts/smoke-test.mjs && node scripts/live-mock-test.mjs"
   }
 }

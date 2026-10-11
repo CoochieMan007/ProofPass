@@ -12,6 +12,8 @@ loadDotEnv(join(ROOT, ".env.local"));
 loadDotEnv(join(ROOT, ".env"));
 
 const PORT = Number(process.env.PORT || 3000);
+// Local default stays loopback-only; hosting platforms set HOST=0.0.0.0.
+const HOST = process.env.HOST || "127.0.0.1";
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -139,8 +141,8 @@ const server = http.createServer(async (req, res) => {
   res.end("Not found");
 });
 
-server.listen(PORT, process.env.HOST || "127.0.0.1", () => {
-console.log(`\nProofPass is running: http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`\nProofPass is running: http://localhost:${PORT}`);
   console.log(`Mode: ${isLiveConfigured() ? "Demo + Live Credence" : "Demo (no Credence credentials required)"}`);
   console.log("Press Ctrl+C to stop.\n");
 });

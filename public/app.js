@@ -20,6 +20,35 @@ const failAt = { unsupported: 2, cancelled: 3, expired: 1, network: 1, failed: 4
 const state = { developer: false, failureLab: false, mode: "demo", flow: "apple", scenario: "success", liveConfigured: false, phase: "idle", result: null };
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+class LiveError extends Error {
+  constructor(title, message, detail) {
+    super(message);
+    this.title = title;
+    this.detail = detail;
+  }
+}
+
+// Turn browser / wallet / server failures into neutral, user-safe states.
+// Technical detail is kept for the Developer View only.
+function describeLiveError(error) {
+  if (error instanceof LiveError) return error;
+  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  switch (error?.name) {
+    case "NotAllowedError":
+    case "AbortError":
+      return new LiveError("Nothing was shared", "The wallet request was cancelled before consent. You can safely try again.", detail);
+    case "NotSupportedError":
+    case "TypeError":
+      return new LiveError("Wallet flow unavailable", "This browser could not start a digital ID request. Try a current version of Chrome or Safari.", detail);
+    case "NetworkError":
+    case "IdentityCredentialError":
+      return new LiveError("No wallet responded", "No compatible digital ID was shared. Make sure your phone has a supported ID in its wallet, then scan the QR code again.", detail);
+    default:
+      return new LiveError("Could not verify credential", "Verification could not be completed. No decision was recorded.", detail);
+  }
+}
 
 function renderTimeline(statuses = []) {
   $("timeline").innerHTML = timelineTemplate.map(([title, detail, duration], i) => {
@@ -53,11 +82,15 @@ function reset() {
   $("verifyButton").addEventListener("click", verify);
 }
 
-function showResult({ ok, title, message, result }) {
+function showResult({ ok, title, message, result, detail }) {
   const cls = ok ? "success-result" : "error-result";
   const icon = ok ? "✓" : "!";
-  $("resultArea").innerHTML = `<div class="result-card ${cls}"><div class="result-icon">${icon}</div><div><span class="muted">${ok ? "VERIFICATION RESULT" : "SAFE FAILURE"}</span><h3>${title}</h3><p>${message}</p></div><button id="retryButton" class="link-button">Run again ↻</button></div>`;
+  $("resultArea").innerHTML = `<div class="result-card ${cls}"><div class="result-icon">${icon}</div><div><span class="muted">${ok ? "VERIFICATION RESULT" : "SAFE FAILURE"}</span><h3>${escapeHtml(title)}</h3><p>${escapeHtml(message)}</p></div><button id="retryButton" class="link-button">Run again ↻</button></div>`;
   $("retryButton").addEventListener("click", reset);
+  if (detail) {
+    $("jsonBlock").textContent = JSON.stringify({ verified: false, error: detail }, null, 2);
+    $("jsonBlock").classList.remove("hidden");
+  }
   if (result) {
     $("jsonBlock").textContent = JSON.stringify({
       verified: result.verified,
@@ -114,19 +147,21 @@ async function runLive() {
     statuses[0] = "active"; renderTimeline(statuses);
     const sessionResponse = await fetch("/api/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ flow: state.flow }) });
     const session = await sessionResponse.json();
-    if (!sessionResponse.ok) throw new Error(session.error || "Could not create Credence session.");
+    if (!sessionResponse.ok) throw new LiveError("Verifier unavailable", "ProofPass could not start a verification session. Please try again shortly.", session.error || `HTTP ${sessionResponse.status}`);
     statuses[0] = "success"; statuses[1] = "success"; statuses[2] = "active"; renderTimeline(statuses);
 
-    if (!navigator.credentials || typeof navigator.credentials.get !== "function") throw new Error("This browser does not expose the Digital Credentials API.");
+    if (typeof window.DigitalCredential === "undefined" || !navigator.credentials?.get) {
+      throw new LiveError("Wallet flow unavailable", "This browser does not support digital ID requests. Try a current version of Chrome or Safari.", "Digital Credentials API not available");
+    }
     const credential = await navigator.credentials.get({ digital: { requests: [{ protocol: session.protocol, data: session.request }] }, mediation: "required" });
-    if (!credential || !credential.data) throw new Error("Wallet returned no credential data.");
+    if (!credential || !credential.data) throw new LiveError("No wallet responded", "The wallet did not return a credential. Please try again.", "Empty credential.data");
 
     statuses[2] = "success"; statuses[3] = "success"; statuses[4] = "active"; renderTimeline(statuses);
     const verifyResponse = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ flow: state.flow, sessionId: session.sessionId, data: credential.data }) });
     const verified = await verifyResponse.json();
-    if (!verifyResponse.ok) throw new Error(verified.error || "Credence validation failed.");
-    if (verified.cancelled) throw new Error(verified.message || "Verification was cancelled by the user.");
-    if (!verified.verified) throw new Error("Credence did not validate this credential.");
+    if (!verifyResponse.ok) throw new LiveError("Could not verify credential", "Verification could not be completed. No decision was recorded.", verified.error || `HTTP ${verifyResponse.status}`);
+    if (verified.cancelled) throw new LiveError("Nothing was shared", "The request was cancelled before consent. You can safely try again.", verified.message || "cancelled");
+    if (!verified.verified) throw new LiveError("Could not verify credential", "This credential could not be verified. No decision was recorded.", "Credence returned res=false");
 
     statuses[4] = "success"; statuses[5] = "success"; renderTimeline(statuses);
     $("elapsed").textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`;
@@ -136,7 +171,8 @@ async function runLive() {
     if (active >= 0) statuses[active] = "error";
     renderTimeline(statuses);
     $("elapsed").textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`;
-    showResult({ ok: false, title: "Live verification could not complete", message: error instanceof Error ? error.message : "Unknown live verification error." });
+    const failure = describeLiveError(error);
+    showResult({ ok: false, title: failure.title, message: failure.message, detail: failure.detail });
   }
 }
 

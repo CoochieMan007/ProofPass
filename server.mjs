@@ -62,12 +62,25 @@ async function readJson(req) {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 1_000_000) throw new Error("Request body too large.");
+    if (size > 1_000_000) throw new RequestError(413, "Request body too large.");
     chunks.push(chunk);
   }
   const text = Buffer.concat(chunks).toString("utf8");
-  return text ? JSON.parse(text) : {};
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    throw new RequestError(400, "Request body must be valid JSON.");
+  }
 }
+
+class RequestError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const errorStatus = (error) => (error instanceof RequestError ? error.status : 500);
 
 async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/status") {
@@ -81,7 +94,7 @@ async function handleApi(req, res, url) {
       const flow = body.flow === "google" ? "google" : "apple";
       return sendJson(res, 200, await createSession(flow));
     } catch (error) {
-      return sendJson(res, 500, { error: error instanceof Error ? error.message : "Could not create session." });
+      return sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : "Could not create session." });
     }
   }
 
@@ -93,7 +106,7 @@ async function handleApi(req, res, url) {
       const flow = body.flow === "google" ? "google" : "apple";
       return sendJson(res, 200, await verifySession({ flow, sessionId: body.sessionId, data: body.data }));
     } catch (error) {
-      return sendJson(res, 500, { error: error instanceof Error ? error.message : "Could not verify credential." });
+      return sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : "Could not verify credential." });
     }
   }
 

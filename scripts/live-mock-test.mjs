@@ -61,6 +61,7 @@ try {
   assert(apple.status === 200, `Apple session failed: ${JSON.stringify(apple.json)}`);
   assert(apple.json.request?.deviceRequest === "DEVREQ" && apple.json.request?.encryptionInfo === "ENCINFO", "Apple request must be { deviceRequest, encryptionInfo }.");
   assert(google.json.request?.response_type === "vp_token", "Google request must pass the payload object through.");
+  assert(google.json.protocol === "openid4vp-v1-unsigned", "Google flow should use the openid4vp-v1-unsigned protocol.");
   assert(seen.filter((r) => r.path === "/v1/setup").length === 1, "Concurrent sessions should share one token setup.");
 
   const setup = seen.find((r) => r.path === "/v1/setup");
@@ -69,11 +70,13 @@ try {
 
   const verified = await post("/api/verify", JSON.stringify({ flow: "apple", sessionId: "S1", data: { response: "WALLET" } }));
   assert(verified.json.verified === true, "Apple verification should succeed.");
-  assert(seen.find((r) => r.path === "/v1/verifyDocRequest").body.data === "WALLET", "Wallet { response } should be unwrapped for verifyDocRequest.");
+  assert(seen.find((r) => r.path === "/v1/verifyDocRequest").body.data === JSON.stringify({ response: "WALLET" }), "mdoc credential.data objects should be sent JSON-stringified, as in Credence's reference app.");
   assert(JSON.stringify(verified.json.claimKeys) === '["age_over_21","given_name"]', "Only claim names should be returned.");
   assert(!JSON.stringify(verified.json).includes("Jane"), "Claim values must not reach the browser.");
 
   const cancelled = await post("/api/verify", JSON.stringify({ flow: "google", sessionId: "S2", data: { response: "JWE" } }));
+  assert(seen.find((r) => r.path === "/dcapi/openid4vp/v1/validate").body.data === "JWE", "OpenID4VP validate should receive the JWE string from credential.data.response.");
+  assert(seen.filter((r) => r.path !== "/v1/refresh").every((r) => r.origin === "https://proofpass.example"), "Every Credence call should carry the registered Origin.");
   assert(cancelled.json.cancelled === true && cancelled.json.verified === false, "Cancellation should be reported as cancelled.");
 
   const malformed = await post("/api/verify", "{not json");
@@ -81,7 +84,8 @@ try {
 
   console.log("✓ ProofPass live-mode mock test passed");
   console.log("  - Apple request shape matches the Digital Credentials API");
-  console.log("  - wallet response unwrapped; only claim names returned");
+  console.log("  - wallet responses shaped like Credence's reference app; only claim names returned");
+console.log("  - Google uses openid4vp-v1-unsigned; every call carries Origin");
   console.log("  - credentials trimmed; concurrent requests share one token");
   console.log("  - cancellation and malformed input handled");
 } finally {

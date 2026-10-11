@@ -68,7 +68,41 @@ function renderScenarios() {
 }
 
 function updateProtocol() {
-  $("protocolValue").textContent = state.flow === "google" ? "openid4vp" : "org-iso-mdoc";
+  $("protocolValue").textContent = state.flow === "google" ? "openid4vp-v1-unsigned" : "org-iso-mdoc";
+}
+
+// iOS Safari only allows navigator.credentials.get() inside the user's tap. Awaiting a
+// network call between the click and get() loses that activation, so (like Credence's
+// reference app) start the session request on pointerdown and reuse it on click.
+const PREFETCH_REUSE_MS = 60_000;
+let sessionPrefetch = null;
+
+function requestSession(flow) {
+  return fetch("/api/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ flow }) })
+    .then(async (r) => ({ ok: r.ok, status: r.status, body: await r.json() }));
+}
+
+function isPrefetchFresh() {
+  return sessionPrefetch && sessionPrefetch.flow === state.flow && performance.now() - sessionPrefetch.at < PREFETCH_REUSE_MS;
+}
+
+function prefetchSession() {
+  if (state.mode !== "live" || isPrefetchFresh()) return;
+  const promise = requestSession(state.flow);
+  promise.catch(() => {});
+  sessionPrefetch = { flow: state.flow, at: performance.now(), promise };
+}
+
+// Each session is used once; the next attempt prefetches a fresh one.
+function takeSession() {
+  const promise = isPrefetchFresh() ? sessionPrefetch.promise : requestSession(state.flow);
+  sessionPrefetch = null;
+  return promise;
+}
+
+function bindVerifyButton() {
+  $("verifyButton").addEventListener("pointerdown", prefetchSession);
+  $("verifyButton").addEventListener("click", verify);
 }
 
 function reset() {
@@ -79,7 +113,7 @@ function reset() {
   $("jsonBlock").textContent = "";
   renderTimeline();
   $("resultArea").innerHTML = '<button id="verifyButton" class="verify-button"><span>▣</span> Verify with Digital ID <span>→</span></button>';
-  $("verifyButton").addEventListener("click", verify);
+  bindVerifyButton();
 }
 
 function showResult({ ok, title, message, result, detail }) {
@@ -145,12 +179,11 @@ async function runLive() {
   const statuses = Array(timelineTemplate.length).fill("waiting");
   try {
     statuses[0] = "active"; renderTimeline(statuses);
-    const sessionResponse = await fetch("/api/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ flow: state.flow }) });
-    const session = await sessionResponse.json();
-    if (!sessionResponse.ok) throw new LiveError("Verifier unavailable", "ProofPass could not start a verification session. Please try again shortly.", session.error || `HTTP ${sessionResponse.status}`);
+    const { ok, status, body: session } = await takeSession();
+    if (!ok) throw new LiveError("Verifier unavailable", "ProofPass could not start a verification session. Please try again shortly.", session.error || `HTTP ${status}`);
     statuses[0] = "success"; statuses[1] = "success"; statuses[2] = "active"; renderTimeline(statuses);
 
-    if (typeof window.DigitalCredential === "undefined" || !navigator.credentials?.get) {
+    if (!navigator.credentials?.get) {
       throw new LiveError("Wallet flow unavailable", "This browser does not support digital ID requests. Try a current version of Chrome or Safari.", "Digital Credentials API not available");
     }
     const credential = await navigator.credentials.get({ digital: { requests: [{ protocol: session.protocol, data: session.request }] }, mediation: "required" });
@@ -211,4 +244,4 @@ fetch("/api/status").then((r) => r.json()).then((data) => {
 renderTimeline();
 renderScenarios();
 updateProtocol();
-$("verifyButton").addEventListener("click", verify);
+bindVerifyButton();

@@ -12,6 +12,8 @@ ProofPass asks a customer's mobile wallet (Apple Wallet, Google Wallet) for the 
 
 No npm dependencies: Node.js 20+ serves plain HTML, CSS and JavaScript.
 
+Built with AI assistance (Claude Code).
+
 ## Run locally
 
 ```bash

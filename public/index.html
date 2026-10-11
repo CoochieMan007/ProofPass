@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="ProofPass: privacy-first Credence ID Cloud SDK interview demo" />
-  <title>ProofPass — Credence ID Demo</title>
+  <meta name="description" content="ProofPass: privacy-first digital ID verification, powered by the Credence ID Cloud SDK" />
+  <title>ProofPass — Privacy-first ID verification</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">P</div><span>ProofPass</span><span class="tag">Credence demo</span></div>
+      <div class="brand"><div class="brand-mark">P</div><span>ProofPass</span><span class="tag">Powered by Credence ID</span></div>
       <div class="top-actions">
         <button id="developerToggle" class="chip">◉ Developer View</button>
         <button id="failureToggle" class="chip">⚗ Failure Lab</button>
@@ -23,7 +23,7 @@
         <h1>Prove eligibility.<br><span>Not your entire identity.</span></h1>
         <p>A digital-ID checkpoint for high-trust actions. ProofPass asks for the minimum evidence a transaction needs and avoids turning verification into an identity database.</p>
       </div>
-      <div class="trust-pill"><div class="shield">✓</div><div><b>Designed around data minimization</b><small>No ID image in Demo Mode</small></div></div>
+      <div class="trust-pill"><div class="shield">✓</div><div><b>Designed around data minimization</b><small>Keeps the decision, not your ID</small></div></div>
     </section>
 
     <section id="workspace" class="workspace">
@@ -41,15 +41,15 @@
           <div><span class="check">✓</span>Required driving eligibility</div>
         </div>
 
-        <div class="privacy-box"><div class="lock">⌁</div><div><b>Selective by design</b><p>ProofPass does not need your address, license number, height, or an uploaded ID photo for this demo policy.</p></div></div>
+        <div class="privacy-box"><div class="lock">⌁</div><div><b>Selective by design</b><p>Your wallet shows exactly what is requested before anything is shared. ProofPass keeps only the verification decision: no ID images or personal values are stored.</p></div></div>
 
         <div class="controls-grid">
-          <label><span>Run mode</span><select id="modeSelect"><option value="demo">Demo Mode — always runnable</option><option id="liveOption" value="live" disabled>Live Credence Mode — credentials required</option></select></label>
+          <label><span>Run mode</span><select id="modeSelect"><option value="demo">Demo Mode — simulated</option><option id="liveOption" value="live" disabled>Live Credence Mode — credentials required</option></select></label>
           <label><span>Wallet flow</span><select id="flowSelect"><option value="apple">Apple Wallet · ISO mdoc</option><option value="google">Google Wallet · OpenID4VP</option></select></label>
         </div>
 
         <section id="failurePanel" class="failure-panel hidden">
-          <div class="panel-title"><span>⚗</span><div><b>Failure Lab</b><small>Show the interviewer the unhappy paths</small></div></div>
+          <div class="panel-title"><span>⚗</span><div><b>Failure Lab</b><small>Simulate the failure states customers will hit</small></div></div>
           <div id="scenarioGrid" class="scenario-grid"></div>
         </section>
 

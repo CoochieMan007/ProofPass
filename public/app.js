@@ -248,7 +248,6 @@ async function runDemo() {
     verified: true,
     policy: "DRIVER_ELIGIBILITY",
     provider: "Credence ID (simulated)",
-    wallet: state.flow === "google" ? "Google Wallet" : "Apple Wallet",
     protocol: state.flow === "google" ? "OpenID4VP / ISO mdoc" : "org-iso-mdoc / ISO 18013",
     claims: { identity_valid: true, driving_privilege: true },
     storage: "No raw credential or ID image persisted",

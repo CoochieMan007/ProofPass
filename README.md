@@ -102,7 +102,7 @@ Verified against the live Credence Cloud SDK (`playground`):
 | Apple Wallet on iPhone (Chrome QR → iPhone) | ❌ "No eligible IDs available on your device" (see below) |
 | Token refresh | ✅ implemented and covered by the mock test; not yet observed live (tokens last 15 min) |
 
-**Why Apple Wallet declines:** Apple Wallet only offers IDs to website requests signed (`readerAuth`) with an Apple-issued certificate for the requesting domain. The Developer View's request inspector shows the difference. Credence's hosted playground request is signed with an Apple-issued certificate for `credenceid.com` and is accepted on the same iPhone and California state ID. The request Credence returns for this domain has no `readerAuth`. Credence confirmed that signed requests for a customer's own domain are not available on evaluation licenses and recommended Multipaz Wallet for this demo. Multipaz accepts the unsigned request but warns that the requesting website is unknown, which is the same missing reader authentication.
+**Why Apple Wallet declines:** Apple Wallet only offers IDs to website requests signed (`readerAuth`) with an Apple-issued certificate for the requesting domain. The Developer View's request inspector shows the difference. Credence's hosted playground request is signed with an Apple-issued certificate for `credenceid.com` and is accepted on the same iPhone and California state ID. The request Credence returns for this domain has no `readerAuth`. Signed requests for a customer's own domain aren't available on evaluation licenses, so this demo uses Multipaz Wallet. Multipaz accepts the unsigned request but warns that the requesting website is unknown, which is the same missing reader authentication.
 
 ## Code map
 

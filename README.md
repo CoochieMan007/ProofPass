@@ -2,7 +2,7 @@
 
 Privacy-first digital ID verification for high-trust checkouts, built on the **Credence ID Cloud SDK**.
 
-ProofPass asks a customer's mobile wallet (Apple Wallet, Google Wallet) for the evidence a transaction needs, has Credence verify it cryptographically, and keeps only the decision, not the customer's identity data. The sample transaction is a car rental pickup.
+ProofPass asks a customer's mobile wallet for the evidence a transaction needs, has Credence verify it cryptographically, and keeps only the decision, not the customer's identity data. The sample transaction is a car rental pickup.
 
 **Live:** https://proofpass-amey.onrender.com
 
@@ -42,6 +42,15 @@ Live Mode needs a **Cloud SDK** license from the [Verify with Credence portal](h
 
 Locally, copy `.env.example` to `.env.local` (git-ignored). On a host, set them as environment variables. Values are trimmed, so a pasted trailing newline doesn't break authentication.
 
+### Testing with Multipaz Wallet (Android)
+
+The [Multipaz Wallet](https://apps.multipaz.org) from the OpenWallet Foundation accepts unsigned website requests, so it works with an evaluation license:
+
+1. Install **Multipaz Wallet** (not "Dev") on an Android phone with a screen lock set.
+2. In the wallet, add the **Utopia Driving License** test credential.
+3. Make Credence trust its issuer: download the root certificate from [issuer.multipaz.org](https://issuer.multipaz.org/issuer/) (Driver license → *Root certificate in PEM format*) and upload it in the Credence portal under **Trust Management → Private IACA → Upload Enterprise Issuing Authority** (PEM plus a logo up to 400×400; the VICAL option only takes `.cbor`).
+4. On the phone, open the app → **Live** → choose a flow → **Verify with Digital ID** → approve in Multipaz.
+
 ### Deploying on Render
 
 Web Service from this repo → Runtime **Node**, Build `npm install`, Start `node server.mjs`, set `HOST=0.0.0.0` plus the Credence variables. Generate the Cloud SDK license for the exact `https://<service>.onrender.com` origin. Free instances sleep when idle, so the first request can take about a minute.
@@ -54,18 +63,18 @@ The browser never sees the license key or tokens. It talks only to the ProofPass
 Browser                     ProofPass server                    Credence Cloud SDK
 ───────                     ────────────────                    ──────────────────
 pointerdown ── POST /api/session ──► token (cached, 60 s buffer) ─► /v1/setup or /v1/refresh
-                                     Apple:  ─────────────────────► /v1/getDocRequest
-                                     Google: ─────────────────────► /dcapi/openid4vp/v1/initiate
+                                     mdoc:   ─────────────────────► /v1/getDocRequest
+                                     OID4VP: ─────────────────────► /dcapi/openid4vp/v1/initiate
             ◄── { protocol, request, inspection }
 click ── navigator.credentials.get({ digital: { requests: [{ protocol, data }] } })
             │  wallet shows the requested attributes; holder consents
             ▼
-        POST /api/verify ──────────► Apple:  ─────────────────────► /v1/verifyDocRequest
-                                     Google: ─────────────────────► /dcapi/openid4vp/v1/validate
+        POST /api/verify ──────────► mdoc:   ─────────────────────► /v1/verifyDocRequest
+                                     OID4VP: ─────────────────────► /dcapi/openid4vp/v1/validate
             ◄── { verified, claimKeys }   (claim values discarded server-side)
 ```
 
-| | Apple / ISO mdoc | Google / OpenID4VP |
+| | ISO 18013-5 mdoc | OpenID4VP |
 |---|---|---|
 | DC API protocol | `org-iso-mdoc` | `openid4vp-v1-unsigned` |
 | `data` passed to the wallet | `{ deviceRequest, encryptionInfo }` | the `payload` object from `initiate` |
@@ -81,21 +90,19 @@ These shapes match Credence's [React reference integration](https://github.com/C
 - **Failures are product states.** Wallet cancellation, no compatible wallet, unsupported browser, Credence errors and timeouts (15 s) each map to a neutral, user-safe message. Technical detail goes to the Developer View only, and all rendered text is escaped.
 - **Protocol mechanics are isolated.** `public/app.js` owns the user journey. `lib/credence.mjs` owns Credence authentication, endpoints and response shaping. `lib/mdoc.mjs` decodes ISO 18013-5 requests for inspection only.
 
-## Status and known limitation
+## Status
 
-Verified against the live Credence Cloud SDK (`playground`) on Oct 10, 2026:
+Verified against the live Credence Cloud SDK (`playground`):
 
 | Step | Status |
 |---|---|
-| License activation, token issue and refresh | ✅ |
-| Apple (`org-iso-mdoc`) and Google (`openid4vp-v1-unsigned`) wallet requests created | ✅ |
-| Browser hands the request to the wallet (Chrome QR → iPhone) | ✅ |
-| Apple Wallet offers the ID | ❌ "No eligible IDs available on your device" |
-| Credence validates a wallet response | ⏳ not reached |
+| License activation and access tokens | ✅ |
+| `org-iso-mdoc` and `openid4vp-v1-unsigned` wallet requests created | ✅ |
+| **End-to-end verification with Multipaz Wallet on Android** (OpenID4VP, Utopia Driving License): consent → Credence validation → "Identity verified" | ✅ Oct 12, 2026; Credence's Remote Transactions dashboard shows the runs as successful |
+| Apple Wallet on iPhone (Chrome QR → iPhone) | ❌ "No eligible IDs available on your device" (see below) |
+| Token refresh | ✅ implemented and covered by the mock test; not yet observed live (tokens last 15 min) |
 
-**Why Apple Wallet declines:** Apple Wallet only offers IDs to website requests signed (`readerAuth`) with an Apple-issued certificate for the requesting domain. The Developer View's request inspector shows the difference. Credence's hosted playground request is signed with an Apple-issued certificate for `credenceid.com` and is accepted on the same iPhone and California DL. The request Credence returns for this domain has no `readerAuth`. Signing for a customer domain has to be provisioned on the Credence/Apple side and has been raised with Credence.
-
-The Google Wallet flow is implemented to the same reference shapes but has not yet been tested with an ID in Google Wallet.
+**Why Apple Wallet declines:** Apple Wallet only offers IDs to website requests signed (`readerAuth`) with an Apple-issued certificate for the requesting domain. The Developer View's request inspector shows the difference. Credence's hosted playground request is signed with an Apple-issued certificate for `credenceid.com` and is accepted on the same iPhone and California state ID. The request Credence returns for this domain has no `readerAuth`. Credence confirmed that signed requests for a customer's own domain are not available on evaluation licenses and recommended Multipaz Wallet for this demo. Multipaz accepts the unsigned request but warns that the requesting website is unknown, which is the same missing reader authentication.
 
 ## Code map
 
